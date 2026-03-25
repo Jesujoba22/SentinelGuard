@@ -301,4 +301,55 @@
     )
 )
 
+;; =========================================================
+;; Feature: Comprehensive User Risk Profile Readout
+;; =========================================================
+;; A robust 25+ line read-only function that acts as a unified
+;; endpoint for dApps and off-chain indexers to instantly fetch
+;; the full risk profile and operational status of a single user
+;; without having to make multiple on-chain RPC calls.
+(define-read-only (get-user-full-status (user principal))
+    (let
+        (
+            (score (get-user-score user))
+            (is-frozen (default-to false (map-get? frozen-accounts user)))
+            (trusted (is-trusted user))
+            (threshold (var-get fraud-threshold))
+            
+            ;; Calculate safety margin (distance to threshold) safely
+            ;; If the score is already past the threshold, margin is 0
+            (safety-margin (if (>= score threshold) 
+                               u0 
+                               (- threshold score)))
+                               
+            ;; Determine human-readable risk level string categorization
+            ;; - CRITICAL: Account is completely frozen
+            ;; - HIGH: Nearing threshold (score >= 61)
+            ;; - MEDIUM: Moderate risk (score 31 - 60)
+            ;; - LOW: Good standing (score 0 - 30)
+            (risk-level (if is-frozen
+                            "CRITICAL"
+                            (if (>= score u61)
+                                "HIGH"
+                                (if (>= score u31)
+                                    "MEDIUM"
+                                    "LOW"))))
+                                    
+            ;; Quick boolean helper to indicate if txs should be routed
+            (can-transact (and (not is-frozen) (or trusted (< score threshold))))
+        )
+        ;; Returns a structured tuple representing the user's complete standing
+        {
+            user-address: user,
+            current-fraud-score: score,
+            is-account-frozen: is-frozen,
+            is-trusted-whitelist: trusted,
+            points-to-freeze: safety-margin,
+            risk-assessment-level: risk-level,
+            current-global-threshold: threshold,
+            is-eligible-for-tx: can-transact
+        }
+    )
+)
+
 
